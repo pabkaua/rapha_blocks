@@ -1,5 +1,6 @@
 #include <raylib.h>
 #include <string.h>
+#include <stdlib.h>
 
 typedef struct menu{
     int width;
@@ -56,45 +57,45 @@ int menu(MenuItems menu){
 }
 // --------------------------------------------------------------------------------------------------------------------------------------------
 
+// PRINTA O MENU ------------------------------------------------------------------------------------------------------------------------------
 void screenMenu(MenuItems* menu){
-    // FUNDO DA TELA INICIAL ------------------------------------------------------------------------------------------------------------------
+    // FUNDO DA TELA INICIAL -----------------------------
     Vector2 pos = {menu->width, 0};
     DrawTextureEx(menu->background, pos, 90, 1.5, WHITE);
-
-    // ----------------------------------------------------------------------------------------------------------------------------------------
+    // ---------------------------------------------------
     
-    // LOGO -----------------------------------------------------------------------------------------------------------------------------------
-    DrawTexture(menu->logo, (menu->play.x + menu->play.width/2 - menu->logo.width/2), 100, WHITE); // desenha a logo
-    // ----------------------------------------------------------------------------------------------------------------------------------------
+    // LOGO ---------------------------------------------------------------------------------------
+    DrawTexture(menu->logo, (menu->play.x + menu->play.width/2 - menu->logo.width/2), 100, WHITE); 
+    // --------------------------------------------------------------------------------------------
     
     int posYText, posXText; 
     Vector2 mouse = GetMousePosition();
     
-    // BOTÃO E TEXTO JOGAR --------------------------------------------------------------------------------------------------------------------
+    // BOTÃO E TEXTO JOGAR ------------------------------------------------------------
     posXText = centralizeTextRec(menu->play, menu->sizePlay, "JOGAR", 'x');
     posYText = centralizeTextRec(menu->play, menu->sizePlay, "JOGAR", 'y');
     DrawRectangleRec(menu->play, RAYWHITE);
     DrawRectangleLinesEx(menu->play, 5.0, BLACK);
     DrawText("JOGAR", posXText, posYText, menu->sizePlay, BLACK);
-    // ----------------------------------------------------------------------------------------------------------------------------------------
+    // --------------------------------------------------------------------------------
     
-    // BOTÃO E TEXTO COMO JOGAR ---------------------------------------------------------------------------------------------------------------
+    // BOTÃO E TEXTO COMO JOGAR -------------------------------------------------------
     posXText = centralizeTextRec(menu->tutorial, menu->sizeTut, "COMO JOGAR", 'x');
     posYText = centralizeTextRec(menu->tutorial, menu->sizeTut, "COMO JOGAR", 'y');
     DrawRectangleRec(menu->tutorial, RAYWHITE);
     DrawRectangleLinesEx(menu->tutorial, 5.0, BLACK);
     DrawText("COMO JOGAR", posXText, posYText, menu->sizeTut, BLACK);
-    // ----------------------------------------------------------------------------------------------------------------------------------------
+    // --------------------------------------------------------------------------------
     
-    // BOTÃO E TEXTO RANKINGS -----------------------------------------------------------------------------------------------------------------
+    // BOTÃO E TEXTO RANKINGS ---------------------------------------------------------
     posXText = centralizeTextRec(menu->rankings, menu->sizeRankings, "RANKINGS", 'x');
     posYText = centralizeTextRec(menu->rankings, menu->sizeRankings, "RANKINGS", 'y');
     DrawRectangleRec(menu->rankings, RAYWHITE);
     DrawRectangleLinesEx(menu->rankings, 5.0, BLACK);
     DrawText("RANKINGS", posXText, posYText, menu->sizeRankings, BLACK);
-    // ----------------------------------------------------------------------------------------------------------------------------------------
+    // --------------------------------------------------------------------------------
 
-    // VAI FAZER AS ANIMAÇÕES DE TEXTO E EMISSÃO DE SONS CASO CLICADO / MOUSE PASSADO EM CIMA -------------------------------------------------
+    // VAI FAZER AS ANIMAÇÕES DE TEXTO E EMISSÃO DE SONS CASO MOUSE PASSADO EM CIMA ---
     if(CheckCollisionPointRec(mouse, menu->play)) {
         menu->currentHover = 1; // 1 para jogar
         menu->sizePlay = 50;
@@ -118,7 +119,119 @@ void screenMenu(MenuItems* menu){
         PlaySound(menu->hover);
     }
     menu->lastHover = menu-> currentHover;
+    // --------------------------------------------------------------------------------
 }
+// --------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+typedef struct cube{
+    Vector3 pos;
+    Color color;
+    
+    struct cube* next;
+} Cube;
+
+typedef struct menuplay{
+    int status;
+    int difficulty;
+    int blocksnumber;
+    double timeStart;
+
+    Camera camera;
+    Cube* begin;
+} PlayConfigs;
+
+
+
+void screenPlay(PlayConfigs* configs){
+
+    if(configs->status == 0){ // configuras os cubos
+        int min, max, posX, posZ, posY;
+
+        min = (configs->difficulty/3)+1;
+        max = (configs->difficulty/2)+2;
+        configs->blocksnumber = GetRandomValue(5, 5);
+
+        Cube* current = configs->begin;
+
+        int x = 0;
+        while(x < configs->blocksnumber){
+
+            if(current == NULL){ // inicio da lista
+                Cube* newCube = malloc(sizeof(Cube));
+                posX = GetRandomValue(1, 6);
+                posZ = GetRandomValue(1, 6);
+                posY = 1;
+                newCube->pos.x = posX;
+                newCube->pos.y = posY;
+                newCube->pos.z = posZ;
+                newCube->color = WHITE;
+                newCube->next = NULL;
+
+                configs->begin = newCube;
+                current = newCube;
+                x++;
+            } 
+            else if(current->next == NULL){
+                Cube* newCube = malloc(sizeof(Cube));
+                posX = GetRandomValue(1, 6);
+                posZ = GetRandomValue(1, 6);
+                posY = 1;
+                newCube->pos.x = posX;
+                newCube->pos.y = posY;
+                newCube->pos.z = posZ;
+                newCube->color = WHITE;
+                newCube->next = NULL;
+
+                current->next = newCube;
+                current = current->next;
+                x++;
+            }
+            else current = current->next;    
+
+        }
+        configs->status = 1;
+        configs->timeStart = GetTime();
+    }
+
+    if(configs->status == 1){ // faz a contagem de 5s
+        double elapsedTime = 5 - (GetTime() - configs->timeStart);
+        if(elapsedTime <= 0){
+            configs->status = 2;
+        } else {
+            DrawText(TextFormat("%.0f", elapsedTime), 900 - MeasureText("0", 100)/2, 100 , 100, BLACK);
+        }
+    }
+    
+    if(configs->status == 2){ // pergunta e aparece os cubos por 3 segundos
+        DrawText("Quantos cubos há?", 900 - MeasureText("Quantos cubos há?", 100)/2, 100 , 100, BLACK);
+    }
+
+    BeginMode3D(configs->camera);
+    DrawGrid(6, 1);
+    EndMode3D(); 
+}
+
+
+
+
+
+
+
+
 
 int main()
 {
@@ -166,7 +279,20 @@ int main()
         menuIt.sizeTut = 40;
         menuIt.sizeRankings = 40;
 
-    Camera cameramenu();
+    Camera game;
+        game.fovy = 45.0;
+        game.position = (Vector3){11, 12, 11};
+        game.target = (Vector3){0, 0, 0};
+        game.up = (Vector3){0, 1, 0};
+        game.projection = CAMERA_PERSPECTIVE;
+
+    PlayConfigs playIt;
+        playIt.difficulty = 1;
+        playIt.blocksnumber = 0;
+        playIt.begin = NULL;
+        playIt.status = 0;
+        playIt.camera = game;
+        
     // ----------------------------------------------------------------------------------------------------------------------------------------
     
     
@@ -183,12 +309,13 @@ int main()
         ClearBackground(RAYWHITE);
 
         BeginDrawing();
+        
 
             if(menuChoose == 0){
                 screenMenu(&menuIt);
             }
             else if(menuChoose == 1){
-                DrawText("A", 100, 100, 20, BLACK);
+                screenPlay(&playIt);
             }
             else if (menuChoose == 2){
                 DrawText("B", 100, 100, 20, BLACK);
