@@ -126,17 +126,6 @@ void screenMenu(MenuItems* menu){
 
 
 
-
-
-
-
-
-
-
-
-
-
-
 typedef struct cube{
     Vector3 pos;
     Color color;
@@ -149,6 +138,7 @@ typedef struct menuplay{
     int difficulty;
     int blocksnumber;
     double timeStart;
+    Model cubeModel;
 
     Camera camera;
     Cube* begin;
@@ -156,53 +146,77 @@ typedef struct menuplay{
 
 
 
+void freeList(Cube** beginPtr){
+    Cube* current = *beginPtr;
+    Cube* nextCube;
+
+    while (current != NULL) {
+        nextCube = current->next;
+        free(current);
+        current = nextCube;
+    }
+
+    *beginPtr = NULL;
+}
+
+int getYposition(float x, float z, Cube* start){ // empilha os cubos
+    float y = 1;
+    Cube* current = start;
+    while(current != NULL){
+        if(current->pos.x == x && current->pos.z == z){
+            y ++;
+        }
+        current = current->next;
+    }
+    return y;
+}
+
+void printCubes(PlayConfigs* configs){
+    Cube* current = configs->begin;
+
+    while(current!= NULL){
+        //if(current->pos.x < 0){}
+        DrawModel(configs->cubeModel, current->pos, 1, WHITE);
+        current = current->next;
+    }
+}
+
 void screenPlay(PlayConfigs* configs){
 
-    if(configs->status == 0){ // configuras os cubos
-        int min, max, posX, posZ, posY;
+    if(configs->status == 0){ // configuras os cubos e cria a lista
+        freeList(&configs->begin); // limpa a lista
+
+        int min, max;
+        float posX, posZ, posY; // configurando a quantidade de cubos 
 
         min = (configs->difficulty/3)+1;
         max = (configs->difficulty/2)+2;
-        configs->blocksnumber = GetRandomValue(5, 5);
+        configs->blocksnumber = GetRandomValue(9, 10);
 
         Cube* current = configs->begin;
+        int blocksConfigured = 0;
 
-        int x = 0;
-        while(x < configs->blocksnumber){
+        while(blocksConfigured < configs->blocksnumber){ // cria a lista com os cubos
+            Cube* newCube = malloc(sizeof(Cube));
+            posX = GetRandomValue(-2, 3) - 0.5;
+            posZ = GetRandomValue(-2, 3) - 0.5;
+            posY = getYposition(posX, posZ, configs->begin) - 0.5;
+            newCube->pos = (Vector3){posX, posY, posZ};
+            newCube->color = WHITE;
+            newCube->next = NULL;
 
-            if(current == NULL){ // inicio da lista
-                Cube* newCube = malloc(sizeof(Cube));
-                posX = GetRandomValue(1, 6);
-                posZ = GetRandomValue(1, 6);
-                posY = 1;
-                newCube->pos.x = posX;
-                newCube->pos.y = posY;
-                newCube->pos.z = posZ;
-                newCube->color = WHITE;
-                newCube->next = NULL;
-
+            if(configs->begin == NULL){
                 configs->begin = newCube;
-                current = newCube;
-                x++;
-            } 
-            else if(current->next == NULL){
-                Cube* newCube = malloc(sizeof(Cube));
-                posX = GetRandomValue(1, 6);
-                posZ = GetRandomValue(1, 6);
-                posY = 1;
-                newCube->pos.x = posX;
-                newCube->pos.y = posY;
-                newCube->pos.z = posZ;
-                newCube->color = WHITE;
-                newCube->next = NULL;
-
-                current->next = newCube;
-                current = current->next;
-                x++;
+                current = configs->begin;
             }
-            else current = current->next;    
-
+            else {
+                current->next = newCube;
+                current = newCube;
+            }
+            
+            blocksConfigured ++;
         }
+
         configs->status = 1;
         configs->timeStart = GetTime();
     }
@@ -211,6 +225,7 @@ void screenPlay(PlayConfigs* configs){
         double elapsedTime = 5 - (GetTime() - configs->timeStart);
         if(elapsedTime <= 0){
             configs->status = 2;
+            configs->timeStart = GetTime();
         } else {
             DrawText(TextFormat("%.0f", elapsedTime), 900 - MeasureText("0", 100)/2, 100 , 100, BLACK);
         }
@@ -218,11 +233,25 @@ void screenPlay(PlayConfigs* configs){
     
     if(configs->status == 2){ // pergunta e aparece os cubos por 3 segundos
         DrawText("Quantos cubos há?", 900 - MeasureText("Quantos cubos há?", 100)/2, 100 , 100, BLACK);
+        DrawText(TextFormat("%d", configs->blocksnumber), 100, 100, 100, BLACK);
+
+        /*double elapsedTime = 3 - (GetTime() - configs->timeStart);
+        
+        if(elapsedTime <= 0){
+            configs->status = 3;
+        } else {*/
+
+            BeginMode3D(configs->camera);
+                DrawGrid(6, 1);
+                printCubes(configs);
+            EndMode3D(); 
+        //}
+
+        if(IsKeyReleased(KEY_SPACE)){
+            configs->status = 0;
+        }
     }
 
-    BeginMode3D(configs->camera);
-    DrawGrid(6, 1);
-    EndMode3D(); 
 }
 
 
@@ -240,7 +269,7 @@ int main()
     int screenHeight = 900;
     Image logo = LoadImage("./textures/logobg.png"); // mudando o icon do jogo
     
-    InitWindow(screenWidth, screenHeight, "KRJ CUBES - Version 1.0.0.3");
+    InitWindow(screenWidth, screenHeight, "KRJ CUBES - Version 1.0.0.6");
     SetWindowIcon(logo);
 
     InitAudioDevice();
@@ -281,10 +310,16 @@ int main()
 
     Camera game;
         game.fovy = 45.0;
-        game.position = (Vector3){11, 12, 11};
+        game.position = (Vector3){3, 17, 5};
         game.target = (Vector3){0, 0, 0};
         game.up = (Vector3){0, 1, 0};
         game.projection = CAMERA_PERSPECTIVE;
+
+    Mesh cubeMesh = GenMeshCube(1, 1, 1);
+    Model cube = LoadModelFromMesh(cubeMesh);
+    Image imgCubeSide = LoadImage("./textures/cube_side.png");
+    Texture textureCubeSide = LoadTextureFromImage(imgCubeSide);
+    SetMaterialTexture(cube.materials, MATERIAL_MAP_ALBEDO, textureCubeSide);
 
     PlayConfigs playIt;
         playIt.difficulty = 1;
@@ -292,6 +327,7 @@ int main()
         playIt.begin = NULL;
         playIt.status = 0;
         playIt.camera = game;
+        playIt.cubeModel = cube;
         
     // ----------------------------------------------------------------------------------------------------------------------------------------
     
