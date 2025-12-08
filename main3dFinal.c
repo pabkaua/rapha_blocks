@@ -134,11 +134,23 @@ typedef struct cube{
 } Cube;
 
 typedef struct menuplay{
+    // CONFIGURAÇÕES GERAIS
     int status;
     int difficulty;
     int blocksnumber;
+    // CONFIGURAÇÕES DE RANKING
+    char nick[200];
+    int score;
+    int highscore;
+
     double timeStart;
     Model cubeModel;
+
+    int userGuess;
+    Sound guessUp;
+    Sound guessDown;
+    Sound guessCorrect;
+    Sound guessWrong;
 
     Camera camera;
     Cube* begin;
@@ -171,12 +183,12 @@ int getYposition(float x, float z, Cube* start){ // empilha os cubos
     return y;
 }
 
-void printCubes(PlayConfigs* configs){
+void printCubes(PlayConfigs* configs, Color color){
     Cube* current = configs->begin;
 
     while(current!= NULL){
         //if(current->pos.x < 0){}
-        DrawModel(configs->cubeModel, current->pos, 1, WHITE);
+        DrawModel(configs->cubeModel, current->pos, 1, color);
         current = current->next;
     }
 }
@@ -191,7 +203,7 @@ void screenPlay(PlayConfigs* configs){
 
         min = (configs->difficulty/3)+1;
         max = (configs->difficulty/2)+2;
-        configs->blocksnumber = GetRandomValue(9, 10);
+        configs->blocksnumber = GetRandomValue(min, max);
 
         Cube* current = configs->begin;
         int blocksConfigured = 0;
@@ -221,8 +233,8 @@ void screenPlay(PlayConfigs* configs){
         configs->timeStart = GetTime();
     }
 
-    if(configs->status == 1){ // faz a contagem de 5s
-        double elapsedTime = 5 - (GetTime() - configs->timeStart);
+    if(configs->status == 1){ // faz a contagem de 3s
+        double elapsedTime = 3 - (GetTime() - configs->timeStart);
         if(elapsedTime <= 0){
             configs->status = 2;
             configs->timeStart = GetTime();
@@ -231,24 +243,68 @@ void screenPlay(PlayConfigs* configs){
         }
     }
     
-    if(configs->status == 2){ // pergunta e aparece os cubos por 3 segundos
+    if(configs->status == 2){ // aparece os cubos por 2 segundos
         DrawText("Quantos cubos há?", 900 - MeasureText("Quantos cubos há?", 100)/2, 100 , 100, BLACK);
         DrawText(TextFormat("%d", configs->blocksnumber), 100, 100, 100, BLACK);
-
-        /*double elapsedTime = 3 - (GetTime() - configs->timeStart);
+        
+        double elapsedTime = 2 - (GetTime() - configs->timeStart);
         
         if(elapsedTime <= 0){
             configs->status = 3;
-        } else {*/
-
+        } else {
             BeginMode3D(configs->camera);
                 DrawGrid(6, 1);
-                printCubes(configs);
+                printCubes(configs, WHITE);
             EndMode3D(); 
-        //}
+        }
+    }
+    
+    if(configs->status == 3){ // pega a entrada do usuário
+        if((IsKeyReleased(KEY_A) || IsKeyReleased(KEY_LEFT)) && configs->userGuess > 0){
+            configs->userGuess--;
+            PlaySound(configs->guessDown);
+        } 
+        else if(IsKeyReleased(KEY_D) || IsKeyReleased(KEY_RIGHT)){
+            configs->userGuess++;
+            PlaySound(configs->guessUp);
+        } 
 
-        if(IsKeyReleased(KEY_SPACE)){
+        if(IsKeyReleased(KEY_ENTER)){
+            configs->status = 4;
+
+            if(configs->userGuess == configs->blocksnumber){
+                PlaySound(configs->guessCorrect);
+            } else {
+                PlaySound(configs->guessWrong);
+            }
+
+            configs->userGuess = 0;
+            configs->timeStart = GetTime();
+        }
+
+        DrawText("Quantos cubos há?", 900 - MeasureText("Quantos cubos há?", 100)/2, 100 , 100, BLACK);
+        DrawText(TextFormat("< %d >", configs->userGuess), 900 - MeasureText("< 0 >", 50)/2, 750, 50, BLACK);
+
+        BeginMode3D(configs->camera);
+            DrawGrid(6, 1);     
+        EndMode3D(); 
+    }
+
+    if(configs->status == 4){
+
+        double elapsedTime = 2 - (GetTime() - configs->timeStart);
+
+        if(elapsedTime <= 0){
             configs->status = 0;
+        } 
+        else {
+            Color color = (configs->userGuess == configs->blocksnumber) ? GREEN : RED;
+    
+            DrawText("Quantos cubos há?", 900 - MeasureText("Quantos cubos há?", 100)/2, 100 , 100, BLACK);
+            BeginMode3D(configs->camera);
+                DrawGrid(6, 1);  
+                printCubes(configs, color);
+            EndMode3D();
         }
     }
 
@@ -294,19 +350,19 @@ int main()
         menuIt.height = screenHeight;
 
         menuIt.play = play;
+        menuIt.sizePlay = 40;
         menuIt.tutorial = tutorial;
+        menuIt.sizeTut = 40;
         menuIt.rankings = rankings;
+        menuIt.sizeRankings = 40;
 
         menuIt.logo = logoMenu;
         menuIt.background = background;
-        menuIt.hover = hover;
-        menuIt.click = click;
 
+        menuIt.hover = hover;
         menuIt.currentHover = 0;
         menuIt.lastHover = 0;
-        menuIt.sizePlay = 40;
-        menuIt.sizeTut = 40;
-        menuIt.sizeRankings = 40;
+        menuIt.click = click;
 
     Camera game;
         game.fovy = 45.0;
@@ -321,13 +377,25 @@ int main()
     Texture textureCubeSide = LoadTextureFromImage(imgCubeSide);
     SetMaterialTexture(cube.materials, MATERIAL_MAP_ALBEDO, textureCubeSide);
 
+    Sound guessUp = LoadSound("./sounds/guess_up.mp3");
+    Sound guessDown = LoadSound("./sounds/guess_down.mp3");
+    Sound guessCorrect = LoadSound("./sounds/guess_correct.mp3");
+    Sound guessWrong = LoadSound("./sounds/guess_wrong.mp3");
+
     PlayConfigs playIt;
         playIt.difficulty = 1;
         playIt.blocksnumber = 0;
         playIt.begin = NULL;
         playIt.status = 0;
+        playIt.userGuess = 0;
         playIt.camera = game;
         playIt.cubeModel = cube;
+        
+        playIt.guessUp = guessUp;
+        playIt.guessDown = guessDown;
+        playIt.guessCorrect = guessCorrect;
+        playIt.guessWrong = guessWrong;
+    
         
     // ----------------------------------------------------------------------------------------------------------------------------------------
     
@@ -369,10 +437,16 @@ int main()
     }
 
     UnloadImage(logo);
+    UnloadImage(imgCubeSide);
+    UnloadTexture(logoMenu);
+    UnloadTexture(textureCubeSide);
     UnloadSound(hover);
     UnloadSound(click);
-    UnloadTexture(logoMenu);
-
+    UnloadSound(guessDown);
+    UnloadSound(guessUp);
+    UnloadSound(guessWrong);
+    UnloadSound(guessCorrect);
+    
     CloseAudioDevice();
     CloseWindow();
     return 0;
