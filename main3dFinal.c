@@ -135,13 +135,18 @@ typedef struct cube{
 
 typedef struct menuplay{
     // CONFIGURAÇÕES GERAIS
+    bool gameOver;
     int status;
     int difficulty;
     int blocksnumber;
+    // CONFIGURAÇÕES DE NICK
+    char nick[50];
+    Rectangle nickRec;
+    Texture nickBg;
     // CONFIGURAÇÕES DE RANKING
-    char nick[200];
     int score;
     int highscore;
+    int lifes;
 
     double timeStart;
     Model cubeModel;
@@ -171,7 +176,53 @@ void freeList(Cube** beginPtr){
     *beginPtr = NULL;
 }
 
-int getYposition(float x, float z, Cube* start){ // empilha os cubos
+int getNick(PlayConfigs* configs){
+    Vector2 pos = {1800, 0};
+    DrawTextureEx(configs->nickBg, pos, 90, 1.5, WHITE);
+    DrawRectangleRec(configs->nickRec, RAYWHITE);
+    DrawRectangleLinesEx(configs->nickRec, 5.0, BLACK);
+
+    int posXTitle = (1800 - MeasureText("Digite seu nick e confirme com ENTER", 70))/2;
+    DrawText("Digite seu nick e confirme com ENTER", posXTitle, 200, 70, BLACK);
+
+    int posXNick = centralizeTextRec(configs->nickRec, 40, "aaaaaaaaaaaaaaa", 'x');
+    int posYNick = centralizeTextRec(configs->nickRec, 40, "AAAAAAAAAAAAAA", 'y');
+    DrawText(configs->nick, posXNick, posYNick, 40, BLACK);
+
+    int key = GetCharPressed();
+    while (key > 0) {
+        if (key >= 32 && key <= 125 && strlen(configs->nick) < 15) {
+            int len = strlen(configs->nick);
+            configs->nick[len] = (char)key;
+            configs->nick[len+1] = '\0';
+        }
+        key = GetCharPressed();
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+        int len = strlen(configs->nick);
+        if (len > 0) configs->nick[len-1] = '\0';
+    }
+
+    if (strlen(configs->nick) > 3 && IsKeyPressed(KEY_ENTER)) {
+        return 0;
+    }
+
+    return -1;
+}
+
+void givePoints(PlayConfigs* configs){
+    if(configs->blocksnumber == configs->userGuess){
+        configs->score += 100;
+    } else if((configs->blocksnumber == (configs->userGuess+1)) || (configs->blocksnumber == (configs->userGuess-1))){
+        configs->score += 50;
+        (configs->lifes)--;
+    } else {
+        (configs->lifes)--;
+    }
+}
+
+float getYposition(float x, float z, Cube* start){ // empilha os cubos
     float y = 1;
     Cube* current = start;
     while(current != NULL){
@@ -187,7 +238,6 @@ void printCubes(PlayConfigs* configs, Color color){
     Cube* current = configs->begin;
 
     while(current!= NULL){
-        //if(current->pos.x < 0){}
         DrawModel(configs->cubeModel, current->pos, 1, color);
         current = current->next;
     }
@@ -195,7 +245,13 @@ void printCubes(PlayConfigs* configs, Color color){
 
 void screenPlay(PlayConfigs* configs){
 
+    if(configs->status == -1){ // pega o nick
+        int nickVerified = getNick(configs);
+        configs->status = nickVerified;
+    }
+
     if(configs->status == 0){ // configuras os cubos e cria a lista
+
         freeList(&configs->begin); // limpa a lista
 
         int min, max;
@@ -232,7 +288,7 @@ void screenPlay(PlayConfigs* configs){
         configs->status = 1;
         configs->timeStart = GetTime();
     }
-
+    
     if(configs->status == 1){ // faz a contagem de 3s
         double elapsedTime = 3 - (GetTime() - configs->timeStart);
         if(elapsedTime <= 0){
@@ -269,7 +325,8 @@ void screenPlay(PlayConfigs* configs){
             PlaySound(configs->guessUp);
         } 
 
-        if(IsKeyReleased(KEY_ENTER)){
+        if(IsKeyReleased(KEY_ENTER) || IsKeyReleased(KEY_KP_ENTER)){
+            givePoints(configs);
             configs->status = 4;
 
             if(configs->userGuess == configs->blocksnumber){
@@ -277,30 +334,31 @@ void screenPlay(PlayConfigs* configs){
             } else {
                 PlaySound(configs->guessWrong);
             }
-
-            configs->userGuess = 0;
             configs->timeStart = GetTime();
         }
 
         DrawText("Quantos cubos há?", 900 - MeasureText("Quantos cubos há?", 100)/2, 100 , 100, BLACK);
-        DrawText(TextFormat("< %d >", configs->userGuess), 900 - MeasureText("< 0 >", 50)/2, 750, 50, BLACK);
+        DrawText(TextFormat("< %d >", configs->userGuess), 900 - MeasureText(TextFormat("< %d >", configs->userGuess), 50)/2, 750, 50, BLACK);
+        DrawText(TextFormat("Vidas: %d", configs->lifes), 200, 750, 50, BLACK);
 
         BeginMode3D(configs->camera);
             DrawGrid(6, 1);     
         EndMode3D(); 
     }
 
-    if(configs->status == 4){
+    if(configs->status == 4){ // printa o resultado
 
         double elapsedTime = 2 - (GetTime() - configs->timeStart);
 
         if(elapsedTime <= 0){
-            configs->status = 0;
+            configs->status = 5;
         } 
         else {
             Color color = (configs->userGuess == configs->blocksnumber) ? GREEN : RED;
     
             DrawText("Quantos cubos há?", 900 - MeasureText("Quantos cubos há?", 100)/2, 100 , 100, BLACK);
+            DrawText(TextFormat("%d", configs->blocksnumber), 900 - MeasureText("0", 50)/2, 750, 50, BLACK);
+
             BeginMode3D(configs->camera);
                 DrawGrid(6, 1);  
                 printCubes(configs, color);
@@ -308,14 +366,21 @@ void screenPlay(PlayConfigs* configs){
         }
     }
 
+    if(configs->status == 5){ // reseta tudo ou dá game over
+        configs->userGuess = 0;
+        configs->difficulty++;
+
+        if(configs->lifes == 0){
+
+            DrawText("Game over", 900 - MeasureText("Game over", 100)/2, 100 , 100, BLACK);
+            DrawText(TextFormat("Pontuação: %d", configs->score), 900 - MeasureText(TextFormat("Pontuação: %d", configs->score), 50)/2, 750, 50, BLACK);
+            
+            if(IsKeyReleased(KEY_ENTER) || IsKeyReleased(KEY_KP_ENTER)){
+                configs->gameOver = true;
+            } 
+        } else configs->status = 0;
+    }
 }
-
-
-
-
-
-
-
 
 
 int main()
@@ -325,7 +390,7 @@ int main()
     int screenHeight = 900;
     Image logo = LoadImage("./textures/logobg.png"); // mudando o icon do jogo
     
-    InitWindow(screenWidth, screenHeight, "KRJ CUBES - Version 1.0.0.6");
+    InitWindow(screenWidth, screenHeight, "KRJ CUBES - Version 1.0.1.1");
     SetWindowIcon(logo);
 
     InitAudioDevice();
@@ -333,7 +398,7 @@ int main()
     
     
     // CONFIGURAÇÕES INICIAIS -----------------------------------------------------------------------------------------------------------------
-    int menuChoose = 0;
+    int menuChoose = -1;
     float recButtonWidth = 400, recButtonHeight = 80;
     float recButtonX = screenWidth/2 - recButtonWidth/2;
     
@@ -376,6 +441,7 @@ int main()
     Image imgCubeSide = LoadImage("./textures/cube_side.png");
     Texture textureCubeSide = LoadTextureFromImage(imgCubeSide);
     SetMaterialTexture(cube.materials, MATERIAL_MAP_ALBEDO, textureCubeSide);
+    Rectangle nick = {recButtonX, 550, recButtonWidth, recButtonHeight};
 
     Sound guessUp = LoadSound("./sounds/guess_up.mp3");
     Sound guessDown = LoadSound("./sounds/guess_down.mp3");
@@ -383,11 +449,6 @@ int main()
     Sound guessWrong = LoadSound("./sounds/guess_wrong.mp3");
 
     PlayConfigs playIt;
-        playIt.difficulty = 1;
-        playIt.blocksnumber = 0;
-        playIt.begin = NULL;
-        playIt.status = 0;
-        playIt.userGuess = 0;
         playIt.camera = game;
         playIt.cubeModel = cube;
         
@@ -395,6 +456,8 @@ int main()
         playIt.guessDown = guessDown;
         playIt.guessCorrect = guessCorrect;
         playIt.guessWrong = guessWrong;
+        playIt.nickRec = nick;
+        playIt.nickBg = background;
     
         
     // ----------------------------------------------------------------------------------------------------------------------------------------
@@ -404,22 +467,36 @@ int main()
     while(!WindowShouldClose())
     {
         // ATUALIZANDO ------------------------------------------------------------------------------------------------------------------------
+        if(menuChoose == -1){
+            playIt.difficulty = 1;
+            playIt.blocksnumber = 0;
+            playIt.begin = NULL;
+            playIt.status = -1;
+            playIt.userGuess = 0;
+            playIt.score = 0;
+            playIt.lifes = 5;
+            playIt.gameOver = false;
+            strcpy(playIt.nick, "\0");
+
+            menuChoose = 0;
+        }
+        
         if(menuChoose == 0){
             menuChoose = menu(menuIt);
         } 
         // ------------------------------------------------------------------------------------------------------------------------------------
 
         // DESENHANDO -------------------------------------------------------------------------------------------------------------------------
-        ClearBackground(RAYWHITE);
-
         BeginDrawing();
+        ClearBackground(RAYWHITE);
         
 
             if(menuChoose == 0){
                 screenMenu(&menuIt);
             }
             else if(menuChoose == 1){
-                screenPlay(&playIt);
+                if(playIt.gameOver == true) menuChoose = -1;
+                else screenPlay(&playIt); 
             }
             else if (menuChoose == 2){
                 DrawText("B", 100, 100, 20, BLACK);
