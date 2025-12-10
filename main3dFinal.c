@@ -1,6 +1,7 @@
 #include <raylib.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 typedef struct menu{
     int width;
@@ -125,7 +126,6 @@ void screenMenu(MenuItems* menu){
 
 
 
-
 typedef struct cube{
     Vector3 pos;
     Color color;
@@ -161,22 +161,13 @@ typedef struct menuplay{
     Cube* begin;
 } PlayConfigs;
 
+typedef struct {
+    int pos;
+    char nick[50];
+    int score;
+} RankItem;
 
-
-void freeList(Cube** beginPtr){
-    Cube* current = *beginPtr;
-    Cube* nextCube;
-
-    while (current != NULL) {
-        nextCube = current->next;
-        free(current);
-        current = nextCube;
-    }
-
-    *beginPtr = NULL;
-}
-
-int getNick(PlayConfigs* configs){
+int getNick(PlayConfigs* configs){ // pega o nick do usuário
     Vector2 pos = {1800, 0};
     DrawTextureEx(configs->nickBg, pos, 90, 1.5, WHITE);
     DrawRectangleRec(configs->nickRec, RAYWHITE);
@@ -211,7 +202,37 @@ int getNick(PlayConfigs* configs){
     return -1;
 }
 
-void givePoints(PlayConfigs* configs){
+int getHighScore(char nick[]){ // puxa o recorde com base no nick no arquivo
+    int pos, scoreFile;
+    int score = 0;
+    char nickFile[50];
+
+    FILE* pontArq = fopen("rankings.txt", "r");
+
+    while(fscanf(pontArq, "%d - %s | %d", &pos, nickFile, &scoreFile) == 3){
+        if(strcmp(nick, nickFile) == 0){
+            score = scoreFile;
+        }
+    }
+
+    fclose(pontArq);
+    return score;
+}
+
+void freeList(Cube** beginPtr){ // libera a lista com os blocos a cada nivel
+    Cube* current = *beginPtr;
+    Cube* nextCube;
+
+    while (current != NULL) {
+        nextCube = current->next;
+        free(current);
+        current = nextCube;
+    }
+
+    *beginPtr = NULL;
+}
+
+void givePoints(PlayConfigs* configs){ // dá pontos e/ou tira vidas
     if(configs->blocksnumber == configs->userGuess){
         configs->score += 100;
     } else if((configs->blocksnumber == (configs->userGuess+1)) || (configs->blocksnumber == (configs->userGuess-1))){
@@ -234,7 +255,7 @@ float getYposition(float x, float z, Cube* start){ // empilha os cubos
     return y;
 }
 
-void printCubes(PlayConfigs* configs, Color color){
+void printCubes(PlayConfigs* configs, Color color){ // printa os cubos 3d
     Cube* current = configs->begin;
 
     while(current!= NULL){
@@ -243,11 +264,64 @@ void printCubes(PlayConfigs* configs, Color color){
     }
 }
 
+void updateRankings(char* nick, int points){
+
+    RankItem ranks[20]; // mais que 10 para não estourar ao inserir
+    int count = 0;
+
+    FILE* file = fopen("rankings.txt", "r");
+
+    // 1. LER O ARQUIVO EXISTENTE ------------------------------------------
+    if(file != NULL){
+        while(fscanf(file, "%d - %s | %d", 
+                     &ranks[count].pos, 
+                     ranks[count].nick, 
+                     &ranks[count].score) == 3)
+        {
+            count++;
+            if(count >= 19) break;
+        }
+        fclose(file);
+    }
+
+    // 2. ADICIONAR O NOVO RESULTADO --------------------------------------
+    strcpy(ranks[count].nick, nick);
+    ranks[count].score = points;
+    count++;
+
+    // 3. ORDENAR POR SCORE (DESC) ----------------------------------------
+    for(int i = 0; i < count-1; i++){
+        for(int j = i+1; j < count; j++){
+            if(ranks[j].score > ranks[i].score){
+                RankItem temp = ranks[i];
+                ranks[i] = ranks[j];
+                ranks[j] = temp;
+            }
+        }
+    }
+
+    // 4. REESCREVER O ARQUIVO (TOP 10) -----------------------------------
+    file = fopen("rankings.txt", "w");
+    if(file == NULL) return;
+
+    int limit = (count < 10) ? count : 10;
+
+    for(int i = 0; i < limit; i++){
+        fprintf(file, "%d - %s | %d\n", i+1, ranks[i].nick, ranks[i].score);
+    }
+
+    fclose(file);
+}
+
 void screenPlay(PlayConfigs* configs){
 
-    if(configs->status == -1){ // pega o nick
-        int nickVerified = getNick(configs);
-        configs->status = nickVerified;
+    if(configs->status == -1){ // pega o nick e puxa o recorde
+        configs->status = getNick(configs);
+        configs->highscore = 0;
+
+        if(configs->status == 0){
+            configs->highscore = getHighScore(configs->nick);
+        }
     }
 
     if(configs->status == 0){ // configuras os cubos e cria a lista
@@ -301,10 +375,9 @@ void screenPlay(PlayConfigs* configs){
     
     if(configs->status == 2){ // aparece os cubos por 2 segundos
         DrawText("Quantos cubos há?", 900 - MeasureText("Quantos cubos há?", 100)/2, 100 , 100, BLACK);
-        DrawText(TextFormat("%d", configs->blocksnumber), 100, 100, 100, BLACK);
+        //DrawText(TextFormat("%d", configs->blocksnumber), 100, 100, 100, BLACK);
         
         double elapsedTime = 2 - (GetTime() - configs->timeStart);
-        
         if(elapsedTime <= 0){
             configs->status = 3;
         } else {
@@ -373,13 +446,127 @@ void screenPlay(PlayConfigs* configs){
         if(configs->lifes == 0){
 
             DrawText("Game over", 900 - MeasureText("Game over", 100)/2, 100 , 100, BLACK);
+            DrawText("Pressione ENTER", 900 - MeasureText("Pressione ENTER", 20)/2, 200 , 20, BLACK);
             DrawText(TextFormat("Pontuação: %d", configs->score), 900 - MeasureText(TextFormat("Pontuação: %d", configs->score), 50)/2, 750, 50, BLACK);
             
             if(IsKeyReleased(KEY_ENTER) || IsKeyReleased(KEY_KP_ENTER)){
+                updateRankings(configs->nick, configs->score);
                 configs->gameOver = true;
+                freeList(&configs->begin);
             } 
-        } else configs->status = 0;
+        } 
+        else configs->status = 0;
     }
+}
+
+
+int screenRankings(Texture bg){
+    DrawTextureEx(bg, (Vector2){1800, 0}, 90, 1.5, WHITE);
+    RankItem ranks[10];
+    int count = 0;
+
+    FILE* f = fopen("rankings.txt", "r");
+    if(f != NULL){
+        while(fscanf(f, "%d - %s | %d", &ranks[count].pos, ranks[count].nick, &ranks[count].score) == 3)
+        {
+            count++;
+            if(count >= 10) break;
+        }
+        fclose(f);
+    }
+
+    // Título
+    int titleSize = 80;
+    char title[] = "RANKING - TOP 10";
+    DrawText(title, 900 - MeasureText(title, titleSize)/2, 80, titleSize, BLACK);
+
+    if(count == 0){     // sem rankings
+        DrawText("Nenhum ranking registrado ainda!", 900 - MeasureText("Nenhum ranking registrado ainda!", 40)/2, 300, 40, BLACK);
+
+        DrawText("Pressione ENTER para voltar", 900 - MeasureText("Pressione ENTER para voltar", 30)/2, 
+                 700, 30, DARKGRAY);
+
+        if(IsKeyPressed(KEY_ENTER)) return 1;
+        return 0;
+    }
+
+    // Exibe os rankings
+    int startY = 220;
+    int spacing = 55;
+
+    for(int i = 0; i < count; i++){
+        char line[200];
+        sprintf(line, "%dº  -  %s  |  %d pontos", i + 1, ranks[i].nick, ranks[i].score);
+        DrawText(line, 900 - MeasureText(line, 40)/2, startY + i * spacing, 40, BLACK);
+    }
+
+    // Instrução para voltar
+    DrawText("Pressione ENTER para voltar", 900 - MeasureText("Pressione ENTER para voltar", 30)/2, 780, 30, DARKGRAY);
+
+    if(IsKeyPressed(KEY_ENTER)) return 1;
+
+    return 0; // ainda na tela
+}
+
+int screenTutorial(Texture bg)
+{
+    DrawTextureEx(bg, (Vector2){1800,0}, 90, 1.5, WHITE);
+
+    if (IsKeyPressed(KEY_ENTER)) return 1; // volta ao menu
+    int y = 40; // posição inicial Y
+    int spacing = 35; // espaço entre linhas
+
+    // Título
+    DrawText("TUTORIAL", 20, y, 40, BLACK);
+    y += 60;
+
+    // Como o jogo funciona
+    DrawText("Objetivo: observar os cubos e acertar a quantidade total.", 20, y, 25, BLACK);
+    y += spacing;
+
+    DrawText("Os cubos aparecem por 2 segundos na tela.", 20, y, 25, BLACK);
+    y += spacing;
+
+    DrawText("Depois disso, voce deve responder quantos cubos viu.", 20, y, 25, BLACK);
+    y += spacing;
+
+    DrawText("A dificuldade aumenta gradualmente a cada rodada.", 20, y, 25, BLACK);
+    y += spacing + 10;
+
+    // Controles
+    DrawText("CONTROLES:", 20, y, 30, RED);
+    y += 45;
+
+    DrawText("A / <-  : diminui a resposta", 20, y, 25, BLACK);
+    y += spacing;
+
+    DrawText("D / ->  : aumenta a resposta", 20, y, 25, BLACK);
+    y += spacing;
+
+    DrawText("ENTER   : confirma a resposta", 20, y, 25, BLACK);
+    y += spacing + 10;
+
+    // Pontuação
+    DrawText("PONTOS:", 20, y, 30, RED);
+    y += 45;
+
+    DrawText("Acerto exato: +100 pontos", 20, y, 25, BLACK);
+    y += spacing;
+
+    DrawText("Erro por 1: +50 pontos (perde 1 vida)", 20, y, 25, BLACK);
+    y += spacing;
+
+    DrawText("Erro maior: 0 pontos (perde 1 vida)", 20, y, 25, BLACK);
+    y += spacing + 10;
+
+    // Vidas
+    DrawText("Voce possui 5 vidas. Ao zerar, o jogo acaba.", 20, y, 25, BLACK);
+    y += spacing + 20;
+
+    // Instrução para voltar
+    DrawText("Pressione ENTER para voltar", 20, y, 25, GREEN);
+    
+    return 0;
 }
 
 
@@ -390,7 +577,7 @@ int main()
     int screenHeight = 900;
     Image logo = LoadImage("./textures/logobg.png"); // mudando o icon do jogo
     
-    InitWindow(screenWidth, screenHeight, "KRJ CUBES - Version 1.0.1.1");
+    InitWindow(screenWidth, screenHeight, "KRJ CUBES - Version 2.0.1.1");
     SetWindowIcon(logo);
 
     InitAudioDevice();
@@ -425,9 +612,9 @@ int main()
         menuIt.background = background;
 
         menuIt.hover = hover;
+        menuIt.click = click;
         menuIt.currentHover = 0;
         menuIt.lastHover = 0;
-        menuIt.click = click;
 
     Camera game;
         game.fovy = 45.0;
@@ -499,12 +686,10 @@ int main()
                 else screenPlay(&playIt); 
             }
             else if (menuChoose == 2){
-                DrawText("B", 100, 100, 20, BLACK);
-                // screenTutorial();
+                if(screenTutorial(background) == 1) menuChoose = 0;
             }
             else if (menuChoose == 3){
-                DrawText("C", 100, 100, 20, BLACK);
-                // screenRankings();
+                if(screenRankings(background) == 1) menuChoose = 0;
             }
 
             DrawText("Um jogo por: Kauã, Renan e João", 15, screenHeight - 15, 5, GRAY);
