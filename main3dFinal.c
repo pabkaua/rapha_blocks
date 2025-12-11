@@ -125,7 +125,7 @@ void screenMenu(MenuItems* menu){
 // --------------------------------------------------------------------------------------------------------------------------------------------
 
 
-
+// STRUCTS E FUNÇÕES DE PLAY ------------------------------------------------------------------------------------------------------------------
 typedef struct cube{
     Vector3 pos;
     Color color;
@@ -182,7 +182,7 @@ int getNick(PlayConfigs* configs){ // pega o nick do usuário
 
     int key = GetCharPressed();
     while (key > 0) {
-        if (key >= 32 && key <= 125 && strlen(configs->nick) < 15) {
+        if (key >= 32 && key <= 125 && key != 32 && strlen(configs->nick) < 15) {
             int len = strlen(configs->nick);
             configs->nick[len] = (char)key;
             configs->nick[len+1] = '\0';
@@ -458,8 +458,9 @@ void screenPlay(PlayConfigs* configs){
         else configs->status = 0;
     }
 }
+// --------------------------------------------------------------------------------------------------------------------------------------------
 
-
+// FUNÇÃO RANKINGS ----------------------------------------------------------------------------------------------------------------------------
 int screenRankings(Texture bg){
     DrawTextureEx(bg, (Vector2){1800, 0}, 90, 1.5, WHITE);
     RankItem ranks[10];
@@ -507,7 +508,9 @@ int screenRankings(Texture bg){
 
     return 0; // ainda na tela
 }
+// --------------------------------------------------------------------------------------------------------------------------------------------
 
+// FUNÇÃO TUTORIAL ----------------------------------------------------------------------------------------------------------------------------
 int screenTutorial(Texture bg)
 {
     DrawTextureEx(bg, (Vector2){1800,0}, 90, 1.5, WHITE);
@@ -564,10 +567,11 @@ int screenTutorial(Texture bg)
     y += spacing + 20;
 
     // Instrução para voltar
-    DrawText("Pressione ENTER para voltar", 20, y, 25, GREEN);
+    DrawText("Pressione ENTER para voltar", 900 - MeasureText("Pressione ENTER para voltar", 30)/2, 780, 30, DARKGRAY);
     
     return 0;
 }
+// --------------------------------------------------------------------------------------------------------------------------------------------
 
 
 int main()
@@ -577,7 +581,7 @@ int main()
     int screenHeight = 900;
     Image logo = LoadImage("./textures/logobg.png"); // mudando o icon do jogo
     
-    InitWindow(screenWidth, screenHeight, "KRJ CUBES - Version 2.0.1.1");
+    InitWindow(screenWidth, screenHeight, "KRJ CUBES - Version 1.0.1.1");
     SetWindowIcon(logo);
 
     InitAudioDevice();
